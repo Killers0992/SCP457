@@ -1,8 +1,10 @@
 ﻿using Dissonance;
 using Exiled.API.Features;
+using Exiled.Events.EventArgs;
 using Exiled.Permissions.Extensions;
 using GameCore;
 using HarmonyLib;
+using Interactables.Interobjects.DoorUtils;
 using MEC;
 using System;
 using System.Collections.Generic;
@@ -30,14 +32,29 @@ namespace SCP457
             Exiled.API.Features.Log.Info("Plugin SCP457 enabled.");
             Exiled.Events.Handlers.Server.SendingRemoteAdminCommand += Server_SendingRemoteAdminCommand;
             Exiled.Events.Handlers.Server.SendingConsoleCommand += Server_SendingConsoleCommand;
-            Exiled.Events.Handlers.Player.Joined += Player_Joined;
+            Exiled.Events.Handlers.Player.Verified += Player_Verified;
             Exiled.Events.Handlers.Player.Spawning += Player_Spawning;
-            Exiled.Events.Handlers.Player.Left += Player_Left;
+            Exiled.Events.Handlers.Player.Destroying += Player_Destroy;
             Exiled.Events.Handlers.Player.Died += Player_Died;
             Exiled.Events.Handlers.Server.WaitingForPlayers += Server_WaitingForPlayers;
             Exiled.Events.Handlers.Player.ChangingRole += Player_ChangingRole;
             Exiled.Events.Handlers.Player.Hurting += Player_Hurting;
             Exiled.Events.Handlers.Player.MedicalItemUsed += Player_MedicalItemUsed;
+        }
+
+        private void Player_Verified(VerifiedEventArgs ev)
+        {
+            ev.Player.GameObject.AddComponent<BurningComponent>();
+        }
+
+        private void Player_Destroy(DestroyingEventArgs ev)
+        {
+            var controller = ev.Player.GameObject.GetComponent<SCP457Controller>();
+            if (controller != null)
+                controller.Destroy();
+            var controller2 = ev.Player.GameObject.GetComponent<BurningComponent>();
+            if (controller2 != null)
+                controller2.Destroy();
         }
 
         private void Player_Hurting(Exiled.Events.EventArgs.HurtingEventArgs ev)
@@ -90,13 +107,13 @@ namespace SCP457
                                 }
                             }
                         }
-                        ev.Allow = false;
+                        ev.IsAllowed = false;
                         ev.ReturnMessage = Config.commands.combust.command_used_message;
                         controller.combustdelay = Config.commands.combust.cooldown;
                     }
                     else
                     {
-                        ev.Allow = false;
+                        ev.IsAllowed = false;
                         ev.ReturnMessage = Config.commands.combust.cooldown_message.Replace("%seconds%", ((int)controller.combustdelay).ToString());
                     }
                 }
@@ -223,16 +240,6 @@ namespace SCP457
             }
         }
 
-        private void Player_Left(Exiled.Events.EventArgs.LeftEventArgs ev)
-        {
-            var controller = ev.Player.GameObject.GetComponent<SCP457Controller>();
-            if (controller != null)
-                controller.Destroy();
-            var controller2 = ev.Player.GameObject.GetComponent<BurningComponent>();
-            if (controller2 != null)
-                controller2.Destroy();
-        }
-
         private void Player_Spawning(Exiled.Events.EventArgs.SpawningEventArgs ev)
         {
             if (ev.RoleType == RoleType.Scp0492)
@@ -240,7 +247,13 @@ namespace SCP457
                 var controller = ev.Player.GameObject.GetComponent<SCP457Controller>();
                 if (controller != null)
                 {
-                    global::Door door = UnityEngine.Object.FindObjectsOfType<global::Door>().FirstOrDefault((global::Door dr) => dr.DoorName.ToUpper() == Config.scp457_settings.spawn_location.ToUpper());
+                    DoorVariant door = null;
+                    foreach(var door2 in Map.Doors)
+                    {
+                        if (door.TryGetComponent<DoorNametagExtension>(out DoorNametagExtension ex))
+                            if (ex.GetName == Config.scp457_settings.spawn_location)
+                                door = door2;
+                    }
                     if (door == null)
                         return;
                     if (!global::PlayerMovementSync.FindSafePosition(door.transform.position, out Vector3 down, true))
@@ -263,11 +276,6 @@ namespace SCP457
                     UnityEngine.Object.Destroy(controller);
                 }
             }
-        }
-
-        private void Player_Joined(Exiled.Events.EventArgs.JoinedEventArgs ev)
-        {
-            ev.Player.GameObject.AddComponent<BurningComponent>();
         }
     }
 }
